@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Trimmer</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151922; --panel-2:#1b2130; --line:#262d3d;
+    --text:#e8ebf2; --muted:#8b93a7; --accent:#4f8cff; --accent-2:#22c55e;
+    --warn:#f59e0b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 600px at 50% -200px, #1a2233 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:28px 18px 60px;
+  }
+  .app{max-width:960px;margin:0 auto}
+  h1{font-size:clamp(20px,3vw,28px);margin:0 0 6px;letter-spacing:-.4px}
+  .sub{margin:0 0 22px;color:var(--muted);font-size:14px}
+
+  .drop{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    padding:44px 20px;border:2px dashed var(--line);border-radius:16px;
+    background:var(--panel);cursor:pointer;text-align:center;
+    transition:border-color .18s, background .18s, padding .18s;
+  }
+  .drop:hover,.drop.dragover{border-color:var(--accent);background:#182031}
+  .drop-icon{font-size:34px;line-height:1}
+  .drop-title{font-weight:600;font-size:15px}
+  .drop-sub{font-size:13px;color:var(--muted)}
+  .drop.compact{padding:14px 18px;flex-direction:row;gap:10px}
+  .drop.compact .drop-icon{font-size:18px}
+  .drop.compact .drop-title{font-size:13px;font-weight:500;color:var(--muted)}
+  .drop.compact .drop-sub{display:none}
+
+  .editor{margin-top:20px;display:flex;flex-direction:column;gap:16px}
+  .fileinfo{
+    display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+    font-size:13px;color:var(--muted);background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;
+  }
+  #fname{color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .wavewrap{
+    position:relative;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:8px;overflow:hidden;
+  }
+  #wave{display:block;width:100%;height:190px;border-radius:8px;touch-action:none;cursor:crosshair}
+
+  .times{display:flex;gap:12px;flex-wrap:wrap}
+  .timebox{
+    flex:1 1 140px;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:8px 12px;display:flex;flex-direction:column;gap:4px;
+  }
+  .timebox label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+  .timebox input{
+    background:transparent;border:none;color:var(--text);font-size:16px;
+    font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    padding:0;width:100%;outline:none;
+  }
+  .timebox input:focus{color:var(--accent)}
+  .timebox .readout{
+    font-size:16px;font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent-2);
+  }
+  .timebox .sub{font-size:11px;color:var(--muted)}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{
+    appearance:none;border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+    padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;
+    transition:background .15s,border-color .15s,transform .06s;
+  }
+  .btn:hover:not(:disabled){background:#232b3d;border-color:#3a445c}
+  .btn:active:not(:disabled){transform:translateY(1px)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover:not(:disabled){background:#3f7bf0;border-color:#3f7bf0}
+  .btn.export{background:var(--accent-2);border-color:var(--accent-2);color:#052e14;font-size:15px;padding:12px 20px}
+  .btn.export:hover:not(:disabled){background:#1eb355;border-color:#1eb355}
+  .btn.small{padding:6px 12px;font-size:12px}
+  .btn.ghost{background:transparent}
+
+  .status{font-size:13px;color:var(--muted)}
+  .status.error{color:#ff7b7b}
+  .status.ok{color:var(--accent-2)}
+  .status.warn{color:var(--warn)}
+
+  /* Export panel */
+  .export-panel{
+    background:linear-gradient(180deg,#182031 0%,#141a26 100%);
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;display:flex;flex-direction:column;gap:12px;
+  }
+  .export-head{
+    display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;
+  }
+  .export-head .t{font-size:13px;font-weight:600;letter-spacing:.3px}
+  .export-head .est{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .export-head .est b{color:var(--accent-2)}
+  .quality-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .quality-row label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  select{
+    background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit;cursor:pointer;
+  }
+  select:focus{outline:none;border-color:var(--accent)}
+  .export-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .export-note{font-size:11px;color:var(--muted);line-height:1.5}
+  .export-note b{color:#c3cad9}
+
+  .progress{
+    display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:10px 14px;
+  }
+  .progress[hidden]{display:none}
+  .bar{flex:1;height:8px;background:#0a0d14;border-radius:99px;overflow:hidden}
+  .fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+        transition:width .1s linear}
+  .progress .lbl{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;
+                 min-width:110px;text-align:right}
+
+  .hint{
+    font-size:12px;color:var(--muted);border-top:1px solid var(--line);
+    padding-top:12px;line-height:1.6;
+  }
+  .hint b{color:#b9c2d6}
+  @media (max-width:520px){
+    #wave{height:140px}
+    .btn{flex:1 1 auto;text-align:center}
+    .btn.export{flex-basis:100%}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>✂️ Audio Trimmer</h1>
+  <p class="sub">Pick a song, drag the start &amp; end points, then download <b>only the selected part</b> as a small compressed clip. Everything happens locally in your browser.</p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="audio/*" hidden>
+    <span class="drop-icon">🎵</span>
+    <span class="drop-title">Drop an audio file here or click to browse</span>
+    <span class="drop-sub">MP3 · WAV · OGG · M4A · FLAC</span>
+  </label>
+
+  <section class="editor" id="editor" hidden>
+    <div class="fileinfo">
+      <span id="fname">—</span>
+      <span id="fmeta">—</span>
+    </div>
+
+    <div class="wavewrap">
+      <canvas id="wave"></canvas>
+    </div>
+
+    <div class="times">
+      <div class="timebox">
+        <label for="startNum">Start (s)</label>
+        <input type="number" id="startNum" min="0" step="0.01" value="0">
+      </div>
+      <div class="timebox">
+        <label for="endNum">End (s)</label>
+        <input type="number" id="endNum" min="0" step="0.01" value="0">
+      </div>
+      <div class="timebox">
+        <label>Selected</label>
+        <div class="readout" id="selDur">0:00.000</div>
+        <div class="sub" id="selPct">—</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn primary" id="playSel">▶ Play selection</button>
+      <button class="btn" id="playAll">▶ Play full</button>
+      <button class="btn" id="stopBtn">⏹ Stop</button>
+      <button class="btn" id="selectAll">Select all</button>
+      <button class="btn" id="resetSel">Reset</button>
+    </div>
+
+    <div class="export-panel">
+      <div class="export-head">
+        <span class="t">Download trimmed clip</span>
+        <span class="est" id="estSize">Estimated size: —</span>
+      </div>
+      <div class="quality-row">
+        <label for="quality">Quality</label>
+        <select id="quality">
+          <option value="48000">Small (~48 kbps)</option>
+          <option value="64000">Low (~64 kbps)</option>
+          <option value="96000">Medium (~96 kbps)</option>
+          <option value="128000" selected>High (~128 kbps)</option>
+          <option value="192000">Very high (~192 kbps)</option>
+        </select>
+        <span class="export-note" id="qualityNote">Good balance for music</span>
+      </div>
+      <div class="export-actions">
+        <button class="btn export" id="exportBtn">⤓ Download trimmed clip</button>
+        <button class="btn ghost small" id="exportWav" title="Uncompressed, much larger file">WAV (uncompressed)</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="export-note">
+        Only the highlighted range is encoded — the rest of the song is discarded.
+        The compressed export runs in real time (a 30&nbsp;s clip takes ~30&nbsp;s), so a progress bar appears below.
+      </div>
+    </div>
+
+    <div class="progress" id="progWrap" hidden>
+      <div class="bar"><div class="fill" id="progFill"></div></div>
+      <span class="lbl" id="progLbl">0%</span>
+      <button class="btn small" id="cancelExport">Cancel</button>
+    </div>
+
+    <div class="hint">
+      <b>Tip:</b> drag the blue handles to set start / end, drag inside the highlight to move the whole selection,
+      or drag on an empty area to draw a new one.<br>
+      <b>Output format:</b> the compressed button uses your browser's encoder — <b>Opus (.webm)</b> in Chrome/Firefox/Edge,
+      <b>AAC (.m4a)</b> in Safari. Both play in any modern player. The WAV button is lossless but uncompressed
+      (expect ~10&nbsp;MB per minute).
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const dropEl    = $('drop');
+  const fileInput = $('file');
+  const editor    = $('editor');
+  const canvas    = $('wave');
+  const ctx       = canvas.getContext('2d');
+  const startNum  = $('startNum');
+  const endNum    = $('endNum');
+  const selDurEl  = $('selDur');
+  const selPctEl  = $('selPct');
+  const estSizeEl = $('estSize');
+  const qualitySel= $('quality');
+  const qualityNote = $('qualityNote');
+  const statusEl  = $('status');
+  const fnameEl   = $('fname');
+  const fmetaEl   = $('fmeta');
+  const playSelBtn= $('playSel');
+  const playAllBtn= $('playAll');
+  const stopBtn   = $('stopBtn');
+  const selectAllBtn = $('selectAll');
+  const resetSelBtn  = $('resetSel');
+  const exportBtn = $('exportBtn');
+  const exportWavBtn = $('exportWav');
+  const progWrap  = $('progWrap');
+  const progFill  = $('progFill');
+  const progLbl   = $('progLbl');
+  const cancelBtn = $('cancelExport');
+
+  const MIN_GAP = 0.02;
+  const HIT_PX  = 11;
+
+  let audioCtx    = null;
+  let audioBuffer = null;
+  let DUR         = 0;
+  let fileName    = 'audio';
+  let objectUrl   = null;
+  let originalSize= 0;
+  let selection   = { start: 0, end: 0 };
+  let exporting   = false;
+  let cancelFlag  = false;
+
+  const audioEl = new Audio();
+  audioEl.preload = 'auto';
+
+  let CW = 0, CH = 0, DPR = 1;
+  const staticCanvas = document.createElement('canvas');
+
+  let dragMode = null, dragAnchorTime = 0, dragOffset = 0, dragStartX = 0, newStarted = false;
+  let rafId = null, stopAt = null;
+
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+  function fmt(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    const ms = Math.floor((s - Math.floor(s)) * 1000);
+    return m + ':' + String(sec).padStart(2,'0') + '.' + String(ms).padStart(3,'0');
+  }
+
+  function fmtBytes(b){
+    if (!isFinite(b) || b <= 0) return '0 B';
+    if (b < 1024) return b.toFixed(0) + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(2) + ' MB';
+  }
+
+  function setStatus(msg, type){
+    statusEl.textContent = msg || '';
+    statusEl.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  const timeToX = t => (DUR ? (t / DUR) * CW : 0);
+  const xToTime = x => (CW ? clamp(x / CW, 0, 1) * DUR : 0);
+
+  function roundRect(c, x, y, w, h, r){
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y,     x + w, y + h, r);
+    c.arcTo(x + w, y + h, x,     y + h, r);
+    c.arcTo(x,     y + h, x,     y,     r);
+    c.arcTo(x,     y,     x + w, y,     r);
+    c.closePath();
+  }
+
+  /* ---------------- File loading ---------------- */
+  fileInput.addEventListener('change', e => {
+    if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  ['dragenter','dragover'].forEach(ev =>
+    dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('dragover'); })
+  );
+  ['dragleave','drop'].forEach(ev =>
+    dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove('dragover'); })
+  );
+  dropEl.addEventListener('drop', e => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  async function loadFile(file){
+    if (!file || exporting) return;
+    setStatus('Decoding audio…');
+
+    audioEl.pause();
+    stopAt = null;
+
+    try {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      audioEl.src = objectUrl;
+
+      const arr = await file.arrayBuffer();
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+      }
+      audioBuffer = await audioCtx.decodeAudioData(arr);
+
+      DUR = audioBuffer.duration;
+      fileName = (file.name.replace(/\.[^.]+$/, '') || 'audio');
+      originalSize = file.size;
+      selection = { start: 0, end: DUR };
+
+      editor.hidden = false;
+      dropEl.classList.add('compact');
+
+      fnameEl.textContent = file.name;
+      fmetaEl.textContent =
+        (audioBuffer.numberOfChannels === 1 ? 'Mono' : 'Stereo') + ' · ' +
+        (audioBuffer.sampleRate / 1000).toFixed(1) + ' kHz · ' +
+        fmt(DUR) + ' · ' + fmtBytes(file.size);
+
+      startNum.max = DUR.toFixed(3);
+      endNum.max = DUR.toFixed(3);
+
+      buildStatic();
+      redraw();
+      updateReadouts();
+      setStatus('');
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not decode this file. Try MP3, WAV, OGG or M4A.', 'error');
+    }
+  }
+
+  /* ---------------- Waveform ---------------- */
+  function computePeaks(count){
+    const chans = [];
+    for (let c = 0; c < audioBuffer.numberOfChannels; c++) chans.push(audioBuffer.getChannelData(c));
+    const len = audioBuffer.length;
+    const out = new Float32Array(count * 2);
+    const step = len / count;
+
+    for (let i = 0; i < count; i++){
+      const s = Math.floor(i * step);
+      let e = Math.floor((i + 1) * step);
+      if (e <= s) e = s + 1;
+      if (e > len) e = len;
+
+      let mn = 1, mx = -1;
+      if (s < len){
+        for (let c = 0; c < chans.length; c++){
+          const d = chans[c];
+          for (let j = s; j < e; j++){
+            const v = d[j];
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+          }
+        }
+      }
+      if (mn > mx){ mn = 0; mx = 0; }
+      out[i*2] = mn;
+      out[i*2+1] = mx;
+    }
+    return out;
+  }
+
+  function buildStatic(){
+    if (!audioBuffer) return;
+
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    CW = Math.max(1, Math.floor(canvas.clientWidth));
+    CH = Math.max(1, Math.floor(canvas.clientHeight));
+
+    canvas.width  = Math.round(CW * DPR);
+    canvas.height = Math.round(CH * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    staticCanvas.width  = canvas.width;
+    staticCanvas.height = canvas.height;
+    const g = staticCanvas.getContext('2d');
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    g.fillStyle = '#10131a';
+    g.fillRect(0, 0, CW, CH);
+
+    const count = CW;
+    const peaks = computePeaks(count);
+    const mid = CH / 2;
+    const amp = CH / 2 - 8;
+
+    const grad = g.createLinearGradient(0, 0, 0, CH);
+    grad.addColorStop(0,   '#5b9dff');
+    grad.addColorStop(0.5, '#8b8cff');
+    grad.addColorStop(1,   '#5b9dff');
+    g.fillStyle = grad;
+
+    for (let i = 0; i < count; i++){
+      const mn = peaks[i*2];
+      const mx = peaks[i*2+1];
+      let yTop = mid - mx * amp;
+      let yBot = mid - mn * amp;
+      if (yBot - yTop < 1){ yTop = mid - 0.5; yBot = mid + 0.5; }
+      g.fillRect(i, yTop, 1, yBot - yTop);
+    }
+
+    g.fillStyle = 'rgba(255,255,255,0.10)';
+    g.fillRect(0, mid - 0.5, CW, 1);
+  }
+
+  function drawHandle(x){
+    ctx.fillStyle = '#4f8cff';
+    ctx.fillRect(x - 1.5, 0, 3, CH);
+
+    const w = 11, h = 28;
+    const y = CH / 2 - h / 2;
+    ctx.beginPath();
+    roundRect(ctx, x - w/2, y, w, h, 5);
+    ctx.fillStyle = '#4f8cff';
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(8,14,28,0.55)';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x - 1.6, y + 7); ctx.lineTo(x - 1.6, y + h - 7);
+    ctx.moveTo(x + 1.6, y + 7); ctx.lineTo(x + 1.6, y + h - 7);
+    ctx.strokeStyle = 'rgba(10,16,30,0.65)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+
+  function redraw(){
+    if (!audioBuffer || !CW || !CH) return;
+
+    ctx.clearRect(0, 0, CW, CH);
+    ctx.drawImage(staticCanvas, 0, 0, CW, CH);
+
+    const x1 = timeToX(selection.start);
+    const x2 = timeToX(selection.end);
+
+    ctx.fillStyle = 'rgba(8,10,14,0.74)';
+    ctx.fillRect(0, 0, Math.max(0, x1), CH);
+    ctx.fillRect(x2, 0, Math.max(0, CW - x2), CH);
+
+    ctx.fillStyle = 'rgba(79,140,255,0.10)';
+    ctx.fillRect(x1, 0, Math.max(0, x2 - x1), CH);
+
+    ctx.fillStyle = 'rgba(79,140,255,0.85)';
+    ctx.fillRect(x1, 0, Math.max(0, x2 - x1), 2);
+    ctx.fillRect(x1, CH - 2, Math.max(0, x2 - x1), 2);
+
+    const px = timeToX(clamp(audioEl.currentTime || 0, 0, DUR));
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(px - 0.5, 0, 1, CH);
+
+    drawHandle(x1);
+    drawHandle(x2);
+  }
+
+  /* ---------------- Readouts & size estimate ---------------- */
+  function updateReadouts(){
+    if (document.activeElement !== startNum) startNum.value = selection.start.toFixed(3);
+    if (document.activeElement !== endNum)   endNum.value   = selection.end.toFixed(3);
+    const len = Math.max(0, selection.end - selection.start);
+    selDurEl.textContent = fmt(len);
+
+    if (DUR > 0){
+      const pct = (len / DUR) * 100;
+      selPctEl.textContent = pct.toFixed(1) + '% of the song';
+    } else {
+      selPctEl.textContent = '—';
+    }
+
+    updateEstimate();
+  }
+
+  function updateEstimate(){
+    const len = Math.max(0, selection.end - selection.start);
+    if (len < MIN_GAP || !DUR){
+      estSizeEl.textContent = 'Estimated size: —';
+      return;
+    }
+
+    const bitrate = parseInt(qualitySel.value, 10) || 128000;
+    // bytes ≈ duration_seconds * bitrate_bits_per_sec / 8  (+ small container overhead)
+    const bytes = (len * bitrate) / 8 + 4096;
+
+    let txt = 'Estimated size: <b>' + fmtBytes(bytes) + '</b>';
+    if (originalSize){
+      const pct = ((bytes / originalSize) * 100).toFixed(0);
+      txt += ' <span style="color:var(--muted)">(' + pct + '% of original)</span>';
+    }
+    estSizeEl.innerHTML = txt;
+  }
+
+  qualitySel.addEventListener('change', () => {
+    const notes = {
+      '48000':  'Very small — voice / podcasts',
+      '64000':  'Small — speech, casual listening',
+      '96000':  'Compact — good for music on the go',
+      '128000': 'Good balance for music',
+      '192000': 'High quality — larger file'
+    };
+    qualityNote.textContent = notes[qualitySel.value] || '';
+    updateEstimate();
+  });
+
+  startNum.addEventListener('change', () => {
+    let v = parseFloat(startNum.value);
+    if (!isFinite(v)) v = 0;
+    v = clamp(v, 0, Math.max(0, selection.end - MIN_GAP));
+    selection.start = v;
+    redraw(); updateReadouts();
+  });
+
+  endNum.addEventListener('change', () => {
+    let v = parseFloat(endNum.value);
+    if (!isFinite(v)) v = DUR;
+    v = clamp(v, Math.min(DUR, selection.start + MIN_GAP), DUR);
+    selection.end = v;
+    redraw(); updateReadouts();
+  });
+
+  /* ---------------- Pointer ---------------- */
+  canvas.addEventListener('pointerdown', e => {
+    if (!audioBuffer || exporting) return;
+    canvas.setPointerCapture(e.pointerId);
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const t = xToTime(x);
+
+    const xs = timeToX(selection.start);
+    const xe = timeToX(selection.end);
+
+    if (Math.abs(x - xs) <= HIT_PX){
+      dragMode = 'start';
+    } else if (Math.abs(x - xe) <= HIT_PX){
+      dragMode = 'end';
+    } else if (x > xs && x < xe){
+      dragMode = 'move';
+      dragOffset = t - selection.start;
+    } else {
+      dragMode = 'new';
+      dragAnchorTime = t;
+      dragStartX = x;
+      newStarted = false;
+    }
+    e.preventDefault();
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!audioBuffer) return;
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const t = xToTime(x);
+
+    if (!dragMode){
+      const xs = timeToX(selection.start);
+      const xe = timeToX(selection.end);
+      if (Math.abs(x - xs) <= HIT_PX || Math.abs(x - xe) <= HIT_PX) canvas.style.cursor = 'ew-resize';
+      else if (x > xs && x < xe) canvas.style.cursor = 'grab';
+      else canvas.style.cursor = 'crosshair';
+      return;
+    }
+
+    if (dragMode === 'start'){
+      selection.start = clamp(t, 0, selection.end - MIN_GAP);
+    } else if (dragMode === 'end'){
+      selection.end = clamp(t, selection.start + MIN_GAP, DUR);
+    } else if (dragMode === 'move'){
+      const len = selection.end - selection.start;
+      const s = clamp(t - dragOffset, 0, Math.max(0, DUR - len));
+      selection.start = s;
+      selection.end = s + len;
+    } else if (dragMode === 'new'){
+      if (!newStarted && Math.abs(x - dragStartX) > 3) newStarted = true;
+      if (newStarted){
+        let a = Math.min(dragAnchorTime, t);
+        let b = Math.max(dragAnchorTime, t);
+        if (b - a < MIN_GAP) b = Math.min(DUR, a + MIN_GAP);
+        selection.start = a;
+        selection.end = b;
+      }
+    }
+
+    redraw();
+    updateReadouts();
+  });
+
+  function endDrag(e){
+    if (!dragMode) return;
+    dragMode = null;
+    newStarted = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+    redraw();
+    updateReadouts();
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  /* ---------------- Playback ---------------- */
+  function startLoop(){
+    if (rafId) return;
+    const loop = () => {
+      if (stopAt !== null && audioEl.currentTime >= stopAt){
+        audioEl.pause();
+        audioEl.currentTime = selection.end;
+        stopAt = null;
+      }
+      redraw();
+      if (!audioEl.paused){
+        rafId = requestAnimationFrame(loop);
+      } else {
+        rafId = null;
+      }
+    };
+    rafId = requestAnimationFrame(loop);
+  }
+  audioEl.addEventListener('play', startLoop);
+  audioEl.addEventListener('pause', () => { redraw(); });
+  audioEl.addEventListener('seeked', () => { if (audioEl.paused) redraw(); });
+  audioEl.addEventListener('ended', () => { stopAt = null; redraw(); });
+
+  playSelBtn.addEventListener('click', () => {
+    if (!audioBuffer) return;
+    if (selection.end - selection.start < MIN_GAP) return;
+    stopAt = selection.end;
+    try { audioEl.currentTime = selection.start; } catch(_) {}
+    audioEl.play().catch(err => setStatus('Playback blocked: ' + err.message, 'error'));
+  });
+  playAllBtn.addEventListener('click', () => {
+    if (!audioBuffer) return;
+    stopAt = null;
+    try { audioEl.currentTime = 0; } catch(_) {}
+    audioEl.play().catch(err => setStatus('Playback blocked: ' + err.message, 'error'));
+  });
+  stopBtn.addEventListener('click', () => { stopAt = null; audioEl.pause(); redraw(); });
+  selectAllBtn.addEventListener('click', () => {
+    if (!audioBuffer) return;
+    selection = { start: 0, end: DUR };
+    redraw(); updateReadouts();
+  });
+  resetSelBtn.addEventListener('click', () => {
+    if (!audioBuffer) return;
+    selection = { start: 0, end: DUR };
+    audioEl.pause(); stopAt = null;
+    try { audioEl.currentTime = 0; } catch(_) {}
+    redraw(); updateReadouts();
+  });
+
+  /* ---------------- Resize ---------------- */
+  if (window.ResizeObserver){
+    const ro = new ResizeObserver(() => {
+      if (!audioBuffer) return;
+      buildStatic(); redraw();
+    });
+    ro.observe(canvas.parentElement);
+  } else {
+    window.addEventListener('resize', () => {
+      if (!audioBuffer) return;
+      buildStatic(); redraw();
+    });
+  }
+
+  /* ---------------- Slicing ---------------- */
+  function sliceBuffer(buffer, start, end){
+    const sr = buffer.sampleRate;
+    const s = Math.max(0, Math.floor(start * sr));
+    const e = Math.min(buffer.length, Math.ceil(end * sr));
+    const len = Math.max(1, e - s);
+    const numCh = buffer.numberOfChannels;
+
+    const out = audioCtx.createBuffer(numCh, len, sr);
+    const fade = Math.min(Math.floor(sr * 0.005), Math.floor(len / 2));
+
+    for (let c = 0; c < numCh; c++){
+      const src = buffer.getChannelData(c);
+      const dst = out.getChannelData(c);
+      dst.set(src.subarray(s, e));
+      for (let i = 0; i < fade; i++){
+        const g = i / fade;
+        dst[i] *= g;
+        dst[len - 1 - i] *= g;
+      }
+    }
+    return out;
+  }
+
+  /* ---------------- WAV encoder ---------------- */
+  function writeStr(view, offset, str){
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  function audioBufferToWav(buffer){
+    const numCh = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const numFrames = buffer.length;
+    const bytesPerSample = 2;
+    const blockAlign = numCh * bytesPerSample;
+    const dataSize = numFrames * blockAlign;
+
+    const ab = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(ab);
+
+    writeStr(view, 0,  'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeStr(view, 8,  'WAVE');
+    writeStr(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numCh, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeStr(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const channels = [];
+    for (let c = 0; c < numCh; c++) channels.push(buffer.getChannelData(c));
+
+    let off = 44;
+    for (let i = 0; i < numFrames; i++){
+      for (let c = 0; c < numCh; c++){
+        let s = channels[c][i];
+        s = s < -1 ? -1 : (s > 1 ? 1 : s);
+        view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        off += 2;
+      }
+    }
+    return new Blob([ab], { type: 'audio/wav' });
+  }
+
+  /* ---------------- Compressed encoder (MediaRecorder) ---------------- */
+  function pickMime(){
+    const list = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4',
+      'audio/mpeg'
+    ];
+    for (const m of list){
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return '';
+  }
+
+  function extFor(mime){
+    if (mime.includes('webm')) return 'webm';
+    if (mime.includes('ogg'))  return 'ogg';
+    if (mime.includes('mp4'))  return 'm4a';
+    if (mime.includes('mpeg')) return 'mp3';
+    return 'webm';
+  }
+
+  async function encodeCompressed(buffer, bitrate, onProgress){
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const encCtx = new Ctx();
+    if (encCtx.state === 'suspended') await encCtx.resume();
+
+    const dest = encCtx.createMediaStreamDestination();
+    const src  = encCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(dest);
+
+    const mime = pickMime();
+    if (!mime) throw new Error('No supported audio encoder in this browser');
+
+    const opts = { mimeType: mime, audioBitsPerSecond: bitrate };
+    const rec = new MediaRecorder(dest.stream, opts);
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    let recError = null;
+    const finished = new Promise((resolve, reject) => {
+      rec.onstop = () => resolve();
+      rec.onerror = e => { recError = (e.error || new Error('Encoder error')); reject(recError); };
+    });
+
+    const duration = buffer.duration;
+    const t0 = performance.now();
+    let stopped = false;
+
+    function tick(){
+      if (stopped) return;
+      const elapsed = (performance.now() - t0) / 1000;
+      const pct = Math.min(1, duration ? elapsed / duration : 1);
+      onProgress(pct);
+
+      if (cancelFlag){
+        stopped = true;
+        try { src.stop(); } catch(_) {}
+        try { if (rec.state !== 'inactive') rec.stop(); } catch(_) {}
+        return;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    src.onended = () => {
+      // small tail so the encoder flushes the last frames
+      setTimeout(() => {
+        try { if (rec.state !== 'inactive') rec.stop(); } catch(_) {}
+      }, 200);
+    };
+
+    rec.start();
+    src.start();
+    requestAnimationFrame(tick);
+
+    try {
+      await finished;
+    } finally {
+      try { await encCtx.close(); } catch(_) {}
+    }
+
+    onProgress(1);
+    if (recError) throw recError;
+    if (cancelFlag) throw new Error('cancelled');
+
+    const type = mime.split(';')[0];
+    return { blob: new Blob(chunks, { type }), mime, ext: extFor(mime) };
+  }
+
+  /* ---------------- Download helper ---------------- */
+  function download(blob, name){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  }
+
+  function setExporting(on){
+    exporting = on;
+    exportBtn.disabled = on;
+    exportWavBtn.disabled = on;
+    qualitySel.disabled = on;
+    progWrap.hidden = !on;
+    if (!on){ progFill.style.width = '0%'; progLbl.textContent = '0%'; }
+  }
+
+  cancelBtn.addEventListener('click', () => {
+    if (exporting){
+      cancelFlag = true;
+      setStatus('Cancelling…');
+    }
+  });
+
+  function checkSelection(){
+    if (!audioBuffer) return false;
+    const len = selection.end - selection.start;
+    if (len < MIN_GAP){
+      setStatus('Selection is too short.', 'error');
+      return false;
+    }
+    return true;
+  }
+
+  /* ---------------- Export: compressed (small) ---------------- */
+  exportBtn.addEventListener('click', async () => {
+    if (!checkSelection()) return;
+    if (!window.MediaRecorder){
+      setStatus('This browser cannot encode compressed audio. Use the WAV button.', 'error');
+      return;
+    }
+
+    audioEl.pause();
+    stopAt = null;
+
+    const bitrate = parseInt(qualitySel.value, 10) || 128000;
+    const estBytes = (Math.max(0, selection.end - selection.start) * bitrate) / 8 + 4096;
+
+    cancelFlag = false;
+    setExporting(true);
+    setStatus('Encoding trimmed clip…');
+
+    try {
+      const trimmed = sliceBuffer(audioBuffer, selection.start, selection.end);
+
+      const result = await encodeCompressed(trimmed, bitrate, p => {
+        progFill.style.width = (p * 100).toFixed(1) + '%';
+        progLbl.textContent = Math.round(p * 100) + '%';
+      });
+
+      download(result.blob, fileName + '_trimmed.' + result.ext);
+
+      const gotBytes = result.blob.size;
+      let msg = 'Trimmed clip downloaded · ' + fmtBytes(gotBytes) +
+                ' (est. ' + fmtBytes(estBytes) + ')';
+      if (originalSize){
+        const pct = ((gotBytes / originalSize) * 100).toFixed(0);
+        msg += ' · ' + pct + '% of the original file';
+      }
+      setStatus(msg, 'ok');
+    } catch (err){
+      if (err && err.message === 'cancelled'){
+        setStatus('Export cancelled.');
+      } else {
+        console.error(err);
+        setStatus('Export failed: ' + (err.message || err), 'error');
+      }
+    } finally {
+      setExporting(false);
+    }
+  });
+
+  /* ---------------- Export: WAV (lossless, large) ---------------- */
+  exportWavBtn.addEventListener('click', () => {
+    if (!checkSelection()) return;
+
+    audioEl.pause();
+    stopAt = null;
+
+    setStatus('Building WAV…');
+    try {
+      const trimmed = sliceBuffer(audioBuffer, selection.start, selection.end);
+      const blob = audioBufferToWav(trimmed);
+      download(blob, fileName + '_trimmed.wav');
+
+      let msg = 'WAV downloaded · ' + fmtBytes(blob.size) +
+                ' (this format is uncompressed, so it is much larger than the MP3)';
+      if (originalSize){
+        const pct = ((blob.size / originalSize) * 100).toFixed(0);
+        msg += ' · ' + pct + '% of the original file size';
+      }
+      setStatus(msg, 'warn');
+    } catch (err){
+      console.error(err);
+      setStatus('Export failed: ' + err.message, 'error');
+    }
+  });
+
+  /* ---------------- Warn if entire song is selected ---------------- */
+  (function watchWholeSelection(){
+    // purely informational: nudge the user when they are about to export everything
+    let warned = false;
+    const t = setInterval(() => {
+      if (!audioBuffer){ warned = false; return; }
+      const len = selection.end - selection.start;
+      if (DUR && len / DUR > 0.985){
+        if (!warned){
+          warned = true;
+        }
+      } else {
+        warned = false;
+      }
+    }, 500);
+    // no cleanup needed (single page)
+  })();
+
+  setStatus('');
+})();
+</script>
+</body>
+</html>
